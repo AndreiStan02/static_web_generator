@@ -2,6 +2,9 @@ import re
 
 from textnode import TextNode, TextType
 from leafnode import LeafNode
+from parentnode import ParentNode
+from htmlnode import HTMLNode
+from block import block_to_block_type, BlockType
 
 def text_node_to_html_node(text_node):
     match text_node.text_type :
@@ -86,6 +89,7 @@ def split_nodes_link(old_nodes):
     return new_nodes
 
 def text_to_textnodes(text):
+    text = text.replace("\n", "")
     nodes = [TextNode(text, TextType.TEXT)]
     nodes = split_nodes_delimiter(nodes, "**", TextType.BOLD)
     nodes = split_nodes_delimiter(nodes, "_", TextType.ITALIC)
@@ -104,5 +108,98 @@ def markdown_to_blocks(markdown):
         filtered_blocks.append(block)
     return filtered_blocks
 
+def format_block(text, block_type):
+    if block_type == BlockType.HEADING:
+        # Quita de 1 a 6 # al inicio + espacio
+        return re.sub(r"^#{1,6}\s+", "", text.strip())
+
+    elif block_type == BlockType.CODE:
+        code = re.sub(r"^```|```$", "", text.strip())
+        code = re.sub(r"^\s+", "", code, flags=re.MULTILINE)  # quita indentaciones por línea
+        return code
+
+    elif block_type == BlockType.QUOTE:
+        # Quita > al inicio de cada línea
+        return re.sub(r"^>\s?", "", text, flags=re.MULTILINE)
+
+    elif block_type == BlockType.UNORDERED_LIST:
+        # Quita - y espacio al inicio de cada línea
+        return re.sub(r"^-\s+", "", text, flags=re.MULTILINE)
+
+    elif block_type == BlockType.ORDERED_LIST:
+        # Quita números secuenciales (1. , 2. , ...) al inicio
+        return re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+
+    elif block_type == BlockType.PARAGRAPH:
+        # Texto plano, se devuelve tal cual (opcional: strip)
+        return re.sub(r"\s+", " ", text.strip())
+
+    else:
+        raise ValueError("no type")
+            
 
 
+def text_to_children(text, block_type):
+    res = []
+    aux_text = format_block(text, block_type)
+    aux_text = re.sub(r"\s+", " ", aux_text.strip())  # Normalización aquí
+    textnodes = text_to_textnodes(aux_text)
+    for node in textnodes:
+        res.append(text_node_to_html_node(node))
+    return res
+
+def markdown_to_html_node(markdown):
+    res = []
+    splited_markdown = markdown_to_blocks(markdown)
+    for block in splited_markdown:
+        block_type = block_to_block_type(block)
+        children = text_to_children(block, block_type)
+        if block_type == BlockType.PARAGRAPH:
+            if not children or all(
+                isinstance(child, LeafNode) and not child.value.strip()
+                for child in children
+            ):
+                continue
+
+            # En caso contrario, crea un <p> con los children
+            html_node = ParentNode(tag="p", children=children)
+            res.append(html_node)
+        elif block_type == BlockType.QUOTE: 
+            if len(children) != 0:
+                html_node = ParentNode(tag="blockquote", children=children)
+                res.append(html_node)
+            else:
+                html_node = LeafNode(tag="blockquote", value=block)
+                res.append(html_node)
+        elif block_type == BlockType.UNORDERED_LIST:
+            if len(children) != 0:
+                html_node = ParentNode(tag="li", children=children)
+                parentNode = ParentNode(tag="ul", children=[html_node])
+                res.append(parentNode)
+            else:
+                html_node = LeafNode(tag="li", value=block)
+                parentNode = ParentNode(tag="ul", children=[html_node])
+                res.append(parentNode)
+        elif block_type == BlockType.ORDERED_LIST:
+            if len(children) != 0:
+                html_node = ParentNode(tag="li", children=children)
+                parentNode = ParentNode(tag="ol", children=[html_node])
+                res.append(parentNode)
+            else:
+                html_node = LeafNode(tag="li", value=block)
+                parentNode = ParentNode(tag="ol", children=[html_node])
+                res.append(parentNode)
+        elif block_type == BlockType.CODE:
+            print(block)
+            html_node = LeafNode(tag="code", value=format_block(block, block_type))
+            parentNode = ParentNode(tag="pre", children=[html_node])
+            res.append(parentNode)
+        elif block_type == BlockType.HEADING:
+            hashes = re.match(r"#*", block).group()
+            if len(children) != 0:
+                html_node = ParentNode(tag=hashes, children=children)
+                res.append(html_node)
+            else:
+                html_node = LeafNode(tag=hashes, value=block)
+                res.append(html_node)
+    return ParentNode(tag="div", children=res)
