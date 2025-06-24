@@ -25,22 +25,23 @@ def text_node_to_html_node(text_node):
                 
 def split_nodes_delimiter(old_nodes, delimiter, text_type):
     new_nodes = []
-    for old_node in old_nodes:
-        if old_node.text_type != TextType.TEXT:
-            new_nodes.append(old_node)
+    for node in old_nodes:
+        if node.text_type != TextType.TEXT:
+            new_nodes.append(node)
             continue
-        split_nodes = []
-        sections = old_node.text.split(delimiter)
-        if len(sections) % 2 == 0:
-            raise ValueError("invalid markdown, formatted section not closed")
-        for i in range(len(sections)):
-            if sections[i] == "":
+
+        parts = node.text.split(delimiter)
+        if len(parts) < 2:
+            new_nodes.append(node)
+            continue
+
+        for i, part in enumerate(parts):
+            if part == "":
                 continue
             if i % 2 == 0:
-                split_nodes.append(TextNode(sections[i], TextType.TEXT))
+                new_nodes.append(TextNode(part, TextType.TEXT))
             else:
-                split_nodes.append(TextNode(sections[i], text_type))
-        new_nodes.extend(split_nodes)
+                new_nodes.append(TextNode(part, text_type))
     return new_nodes
 
 def extract_markdown_images(text):
@@ -56,6 +57,10 @@ def extract_markdown_links(text):
 def split_nodes_image(old_nodes):
     new_nodes = []
     for old_node in old_nodes:
+        if old_node.text_type != TextType.TEXT:
+            new_nodes.append(old_node)
+            continue
+
         split_nodes = []
         images = extract_markdown_images(old_node.text)
         current_text = old_node.text
@@ -74,6 +79,10 @@ def split_nodes_image(old_nodes):
 def split_nodes_link(old_nodes):
     new_nodes = []
     for old_node in old_nodes:
+        if old_node.text_type != TextType.TEXT:
+            new_nodes.append(old_node)
+            continue
+        
         split_nodes = []
         links = extract_markdown_links(old_node.text)
         current_text = old_node.text
@@ -90,12 +99,19 @@ def split_nodes_link(old_nodes):
 
 def text_to_textnodes(text):
     text = text.replace("\n", "")
+    print(text)
     nodes = [TextNode(text, TextType.TEXT)]
+    print(nodes)
     nodes = split_nodes_delimiter(nodes, "**", TextType.BOLD)
+    print(nodes)
     nodes = split_nodes_delimiter(nodes, "_", TextType.ITALIC)
+    print(nodes)
     nodes = split_nodes_delimiter(nodes, "`", TextType.CODE)
+    print(nodes)
     nodes = split_nodes_image(nodes)
+    print(nodes)
     nodes = split_nodes_link(nodes)
+    print(nodes)
     return nodes
 
 def markdown_to_blocks(markdown):
@@ -132,7 +148,8 @@ def format_block(text, block_type):
 
     elif block_type == BlockType.PARAGRAPH:
         # Texto plano, se devuelve tal cual (opcional: strip)
-        return re.sub(r"\s+", " ", text.strip())
+        return " ".join(line.strip() for line in text.strip().splitlines())
+
 
     else:
         raise ValueError("no type")
