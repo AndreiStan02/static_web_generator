@@ -1,4 +1,4 @@
-import re
+import re, os, shutil
 
 from textnode import TextNode, TextType
 from leafnode import LeafNode
@@ -99,19 +99,12 @@ def split_nodes_link(old_nodes):
 
 def text_to_textnodes(text):
     text = text.replace("\n", "")
-    print(text)
     nodes = [TextNode(text, TextType.TEXT)]
-    print(nodes)
     nodes = split_nodes_delimiter(nodes, "**", TextType.BOLD)
-    print(nodes)
     nodes = split_nodes_delimiter(nodes, "_", TextType.ITALIC)
-    print(nodes)
     nodes = split_nodes_delimiter(nodes, "`", TextType.CODE)
-    print(nodes)
     nodes = split_nodes_image(nodes)
-    print(nodes)
     nodes = split_nodes_link(nodes)
-    print(nodes)
     return nodes
 
 def markdown_to_blocks(markdown):
@@ -189,34 +182,72 @@ def markdown_to_html_node(markdown):
                 html_node = LeafNode(tag="blockquote", value=block)
                 res.append(html_node)
         elif block_type == BlockType.UNORDERED_LIST:
-            if len(children) != 0:
-                html_node = ParentNode(tag="li", children=children)
-                parentNode = ParentNode(tag="ul", children=[html_node])
-                res.append(parentNode)
-            else:
-                html_node = LeafNode(tag="li", value=block)
-                parentNode = ParentNode(tag="ul", children=[html_node])
-                res.append(parentNode)
+            lines = block.split("\n")
+            elements = []
+            for line in lines:
+                children = text_to_children(line[2:], BlockType.UNORDERED_LIST)
+                if len(children) != 0:
+                    elements.append(ParentNode(tag="li", children= children))
+                else:
+                    elements.append(ParentNode(tag="li", value=line[2:]))
+            parentNode = ParentNode(tag="ul", children=elements)
+            res.append(parentNode)
         elif block_type == BlockType.ORDERED_LIST:
-            if len(children) != 0:
-                html_node = ParentNode(tag="li", children=children)
-                parentNode = ParentNode(tag="ol", children=[html_node])
-                res.append(parentNode)
-            else:
-                html_node = LeafNode(tag="li", value=block)
-                parentNode = ParentNode(tag="ol", children=[html_node])
-                res.append(parentNode)
+            lines = block.split("\n")
+            elements = []
+            for line in lines:
+                children = text_to_children(line[2:], BlockType.UNORDERED_LIST)
+                if len(children) != 0:
+                    elements.append(ParentNode(tag="li", children= children))
+                else:
+                    elements.append(ParentNode(tag="li", value=line[2:]))
+            parentNode = ParentNode(tag="ol", children=elements)
+            res.append(parentNode)
         elif block_type == BlockType.CODE:
-            print(block)
             html_node = LeafNode(tag="code", value=format_block(block, block_type))
             parentNode = ParentNode(tag="pre", children=[html_node])
             res.append(parentNode)
         elif block_type == BlockType.HEADING:
             hashes = re.match(r"#*", block).group()
+            level = len(hashes)
+            tag = f"h{level}"
+            
             if len(children) != 0:
-                html_node = ParentNode(tag=hashes, children=children)
+                html_node = ParentNode(tag=tag, children=children)
                 res.append(html_node)
             else:
-                html_node = LeafNode(tag=hashes, value=block)
+                html_node = LeafNode(tag=tag, value=block)
                 res.append(html_node)
     return ParentNode(tag="div", children=res)
+
+def extract_title(markdown):
+    lines = markdown.split("\n")
+    for line in lines:
+        if re.match(r"^# ", line):
+            return line[2:].strip()
+    raise Exception("no header")
+
+def generate_page(from_path, template_path, dest_path):
+    print(f"Generating page from {from_path} to {dest_path} using {template_path}")
+    file_from = open(from_path)
+    file_template = open(template_path)
+    markdown = file_from.read()
+    template = file_template.read()
+    html_string = markdown_to_html_node(markdown).to_html()
+    title = extract_title(markdown)
+    page = template.replace("{{ Title }}", title).replace("{{ Content }}", html_string)
+    print(page)
+    with open(dest_path, 'w') as f:
+        f.write(page)
+
+def generate_pages_recursive(dir_path_content, template_path, dest_dir_path):
+    files = os.listdir(dir_path_content)
+    print(files)
+    for file_name in files:
+        if not os.path.isfile(os.path.join(dir_path_content, file_name)):
+            new_dest = os.path.join(dest_dir_path, file_name)
+            os.mkdir(new_dest)
+            generate_pages_recursive(os.path.join(dir_path_content, file_name), template_path, new_dest)
+        else:
+            generate_page(os.path.join(dir_path_content, file_name), template_path, os.path.join(dest_dir_path, "index.html"))
+
