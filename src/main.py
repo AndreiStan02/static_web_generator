@@ -1,14 +1,18 @@
 from textnode import TextNode
 from util import generate_pages_recursive
-import os, shutil
+import os, shutil, sys
 
 def main():
-    clean_and_set_public("static/", "public/")
-    generate_pages_recursive("content", "template.html", "public")
+    basepath = "/"
+    if sys.argv[1]:
+        basepath = sys.argv[1]
+
+    clean_and_set_public("static/", "docs/")
+    generate_pages_recursive("content", "template.html", "docs", basepath)
 
 def clean_and_set_public(source, destination):
     shutil.rmtree(destination)
-    os.mkdir("public")
+    os.mkdir("docs")
 
     source_abs = os.path.abspath(source)
     files = os.listdir(source)
@@ -19,7 +23,7 @@ def clean_and_set_public(source, destination):
             shutil.copy(os.path.join(source_abs, file_name), destination)
 
 def r_clean_and_set_public(source, destination, nested_dir):
-    os.mkdir("public/" + nested_dir)
+    os.mkdir("docs/" + nested_dir)
     nested_abs = os.path.abspath(source) + "/" + nested_dir
     files = os.listdir(nested_abs)
     for file_name in files:
